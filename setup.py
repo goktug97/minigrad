@@ -9,7 +9,7 @@ with open(os.path.join(directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(name='minigrad',
-      version='0.0.3',
+      version='0.0.4',
       description='Autograd Engine for Numpy',
       author='Göktuğ Karakaşlı',
       author_email='karakasligk@gmail.com',
@@ -17,8 +17,8 @@ setup(name='minigrad',
       long_description=long_description,
       long_description_content_type='text/markdown',
       url='https://github.com/goktug97/minigrad',
-      packages = ['grad'],
-      ext_modules = [Extension('minigrad.engine', sources = ['grad/engine.c'])],
+      packages = ['minigrad'],
+      ext_modules = [Extension('minigrad.engine', sources = ['minigrad/engine.c'])],
       classifiers=[
           "Programming Language :: Python :: 3",
           "License :: OSI Approved :: MIT License",
