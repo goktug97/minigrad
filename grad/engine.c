@@ -129,7 +129,6 @@ add_backward(PyObject * self) {
   Value * child_1 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
   Value * child_2 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 1));
   
-  printf("Add Backward %ld\n", PyTuple_Size(((Value *)self)->prev));
   child_1->grad += ((Value*)self)->grad;
   child_2->grad += ((Value*)self)->grad;
   Py_RETURN_NONE;
@@ -222,8 +221,6 @@ backward(PyObject * self){
   ((Value *)self)->grad = 1.0;
   Node * node = ((Value *)self)->topology->tail;
   while (node) {
-    printf("Func Idx: %d\n", node->value->func_idx);
-    printf("asdf\n");
     _backward((PyObject *)(node->value));
     node = node->prev;
   }
