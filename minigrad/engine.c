@@ -142,7 +142,6 @@ static PyObject *
 pow_backward(PyObject * self) {
   Value * child = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
 
-  // self.grad += (other * self.data**(other-1)) * out.grad
   child->grad += PyFloat_AsDouble(((Value*)self)->tmp) *
     pow(child->data, PyFloat_AsDouble(((Value*)self)->tmp) - 1.0) *
     ((Value*)self)->grad;
@@ -287,41 +286,41 @@ PyObject * pyvalue_truediv(PyObject * self, PyObject * other) {
 }
 
 PyNumberMethods Value_as_number = {
-    pyvalue_add,          /* nb_add */
-    pyvalue_subtract, /* nb_subtract */
-    pyvalue_mul, /* nb_multiply */
-    0, /* nb_divide */
-    0, /* nb_remainder */
-    pyvalue_pow, /* nb_divmod */
-    pyvalue_negate, /* nb_power */
-    0, /* nb_negative */
-    0, /* nb_positive */
-    0, /* nb_absolute */
-    0, /* nb_bool */
-    0, /* nb_invert */
-    0, /* nb_lshift */
-    0, /* nb_rshift */
-    0, /* nb_and */
-    0, /* nb_xor */
-    0, /* nb_or */
-    0, /* nb_int */
-    0, /* nb_float */
-    0, /* nb_inplace_add */
-    0, /* nb_inplace_subtract */
-    0, /* nb_inplace_multiply */
-    0, /* nb_inplace_remainder */
-    0, /* nb_inplace_power */
-    0, /* nb_inplace_lshift */
-    0, /* nb_inplace_rshift */
-    0, /* nb_inplace_and */
-    0, /* nb_inplace_xor */
-    0, /* nb_inplace_or */
-    0, /* nb_floor_divide */
-    pyvalue_truediv, /* nb_true_divide */
+    pyvalue_add,
+    pyvalue_subtract,
+    pyvalue_mul,
     0,
-    0, /* nb_index */
-    0, /* nb_matrix_multiply */
-    0, /* nb_inplace_matrix_multiply */
+    0,
+    pyvalue_pow,
+    pyvalue_negate,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    pyvalue_truediv, 
+    0,
+    0,
+    0,
+    0,
 };
 
 static PyTypeObject Value_Type = {
