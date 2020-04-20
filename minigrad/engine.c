@@ -3,11 +3,6 @@
 #include <math.h>
 #include <string.h>
 
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-
-#define __COMP_NPY_UNUSED __attribute__ ((__unused__))
-#define NPY_UNUSED(x) (__NPY_UNUSED_TAGGED ## x) __COMP_NPY_UNUSED
-
 typedef struct List List;
 
 typedef struct {
@@ -35,9 +30,9 @@ struct List {
 static PyTypeObject Value_Type;
 
 PyObject *
-Value_new(PyTypeObject *NPY_UNUSED(type),
+Value_new(PyTypeObject *type,
           PyObject *args,
-          PyObject *NPY_UNUSED(kwds)) {
+          PyObject *kwds) {
   double data;
   if (!PyArg_ParseTuple(args, "d", &data))
     return NULL;
