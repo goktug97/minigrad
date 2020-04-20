@@ -1,9 +1,28 @@
-from distutils.core import setup, Extension
+#!/usr/bin/env python
 
-module1 = Extension('engine',
-                    sources = ['./grad/engine.c'])
+import os
+from setuptools import setup
+from setuptools.extension import Extension
 
-setup (name = 'PackageName',
-       version = '1.0',
-       description = 'This is a demo package',
-       ext_modules = [module1])
+directory = os.path.abspath(os.path.dirname(__file__))
+with open(os.path.join(directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
+
+setup(name='minigrad',
+      version='0.0.2',
+      description='Autograd Engine for Numpy',
+      author='Göktuğ Karakaşlı',
+      author_email='karakasligk@gmail.com',
+      license='MIT',
+      long_description=long_description,
+      long_description_content_type='text/markdown',
+      url='https://github.com/goktug97/minigrad',
+      packages = ['grad'],
+      ext_modules = [Extension('minigrad.engine', sources = ['grad/engine.c'])],
+      classifiers=[
+          "Programming Language :: Python :: 3",
+          "License :: OSI Approved :: MIT License",
+          "Operating System :: OS Independent",
+      ],
+      python_requires='>=3.6',
+)
