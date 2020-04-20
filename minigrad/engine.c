@@ -9,22 +9,22 @@ typedef struct {
   PyObject_HEAD
   double data;
   double grad;
-  PyObject* prev;
+  PyObject *prev;
   int func_idx;
-  PyObject* tmp;
-  List * topology;
+  PyObject *tmp;
+  List *topology;
   int visited;
 } Value;
 
 typedef struct _Node {
-  struct _Node * prev;
-  Value * value;
-  struct _Node * next;
+  struct _Node *prev;
+  Value *value;
+  struct _Node *next;
 } Node;
 
 struct List {
-  Node * head;
-  Node * tail;
+  Node *head;
+  Node *tail;
 };
 
 static PyTypeObject Value_Type;
@@ -36,7 +36,7 @@ Value_new(PyTypeObject *type,
   double data;
   if (!PyArg_ParseTuple(args, "d", &data))
     return NULL;
-  Value* value = (Value*)Value_Type.tp_alloc(&Value_Type, 0);
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
   if (value) {
     value->grad = 0.0;
     value->visited = 0;
@@ -46,7 +46,7 @@ Value_new(PyTypeObject *type,
     value->tmp = Py_None;
     value->func_idx = -1;
   }
-  return (PyObject*)value;
+  return (PyObject *)value;
 }
 
 static int
@@ -75,13 +75,12 @@ Value_clear(Value *self) {
 }
 
 static void
-Value_dealloc(Value* self)
-{
+Value_dealloc(Value *self) {
   // PyObject_GC_UnTrack(self);
   Value_clear(self);
   if (((Value *)self)->topology) {
-    Node * node = ((Value *)self)->topology->tail;
-    Node * tmp;
+    Node *node = ((Value *)self)->topology->tail;
+    Node *tmp;
     while (node) {
       tmp = node;
       node = node->prev;
@@ -93,58 +92,56 @@ Value_dealloc(Value* self)
 }
 
 static PyObject *
-Value_str(PyObject *self)
-{
+Value_str(PyObject *self) {
   char str[128];
-  double data = ((Value*)self)->data;
-  double grad = ((Value*)self)->grad;
+  double data = ((Value *)self)->data;
+  double grad = ((Value *)self)->grad;
   sprintf(str, "Value(data=%lf, grad=%lf)", data, grad);
   return PyUnicode_FromString(str);
 }
 
 static PyObject *
-Value_repr(PyObject *self)
-{
+Value_repr(PyObject *self) {
   char str[128];
-  double data = ((Value*)self)->data;
-  double grad = ((Value*)self)->grad;
+  double data = ((Value *)self)->data;
+  double grad = ((Value *)self)->grad;
   sprintf(str, "Value(data=%lf, grad=%lf)", data, grad);
   return PyUnicode_FromString(str);
 }
 
 static PyObject *
-relu_backward(PyObject * self) {
-  Value * child = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
+relu_backward(PyObject *self) {
+  Value *child = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 0));
   child->grad += (((Value *)self)->data > 0) * ((Value *)self)->grad;
   Py_RETURN_NONE;
 }
 
 static PyObject *
-add_backward(PyObject * self) {
-  Value * child_1 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
-  Value * child_2 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 1));
+add_backward(PyObject *self) {
+  Value *child_1 = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 0));
+  Value *child_2 = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 1));
   
-  child_1->grad += ((Value*)self)->grad;
-  child_2->grad += ((Value*)self)->grad;
+  child_1->grad += ((Value *)self)->grad;
+  child_2->grad += ((Value *)self)->grad;
   Py_RETURN_NONE;
 }
 
 static PyObject *
-mul_backward(PyObject * self) {
-  Value * child_1 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
-  Value * child_2 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 1));
-  child_1->grad += child_2->data * ((Value*)self)->grad;
-  child_2->grad += child_1->data * ((Value*)self)->grad;
+mul_backward(PyObject *self) {
+  Value *child_1 = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 0));
+  Value *child_2 = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 1));
+  child_1->grad += child_2->data * ((Value *)self)->grad;
+  child_2->grad += child_1->data * ((Value *)self)->grad;
   Py_RETURN_NONE;
 }
 
 static PyObject *
-pow_backward(PyObject * self) {
-  Value * child = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
+pow_backward(PyObject *self) {
+  Value *child = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
 
-  child->grad += PyFloat_AsDouble(((Value*)self)->tmp) *
-    pow(child->data, PyFloat_AsDouble(((Value*)self)->tmp) - 1.0) *
-    ((Value*)self)->grad;
+  child->grad += PyFloat_AsDouble(((Value *)self)->tmp) *
+    pow(child->data, PyFloat_AsDouble(((Value *)self)->tmp) - 1.0) *
+    ((Value *)self)->grad;
   Py_RETURN_NONE;
 }
 
@@ -156,8 +153,8 @@ static BackwardFunction backward_methods[] = {
    &relu_backward
   };
 
-static PyObject * Value_relu(PyObject* self) {
-  Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+static PyObject * Value_relu(PyObject *self) {
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
   if (((Value *)self)->data < 0.0) {
     value->data = 0.0;
   } else {
@@ -166,11 +163,11 @@ static PyObject * Value_relu(PyObject* self) {
   value->grad = 0.0;
   value->prev = PyTuple_Pack(1, self);
   value->func_idx = 3;
-  return (PyObject*)value;
+  return (PyObject *)value;
 }
 
-static void list_append(List * list, PyObject * value) {
-  Node * node = malloc(sizeof(Node));
+static void list_append(List *list, PyObject *value) {
+  Node *node = malloc(sizeof(Node));
   node->value = ((Value *)value);
   node->next = NULL;
   if (!(list->head)) {
@@ -184,13 +181,13 @@ static void list_append(List * list, PyObject * value) {
   }
 }
 
-static void build_topology(PyObject * value, List * topology) {
-  Value * _value = ((Value *)value);
+static void build_topology(PyObject *value, List *topology) {
+  Value *_value = ((Value *)value);
   if (!(_value->visited)) {
     _value->visited = 1;
     int n_child = PyTuple_Size(_value->prev);
     for (int i = 0; i < n_child; ++i) {
-      PyObject * child = PyTuple_GetItem(((Value *)value)->prev, i);
+      PyObject *child = PyTuple_GetItem(((Value *)value)->prev, i);
       build_topology(child, topology);
     }
     list_append(topology, value);
@@ -198,7 +195,7 @@ static void build_topology(PyObject * value, List * topology) {
 }
 
 static PyObject *
-_backward(PyObject * self) {
+_backward(PyObject *self) {
   if (((Value *)self)->func_idx >= 0) {
     return backward_methods[((Value *)self)->func_idx](self);
   } else {
@@ -207,7 +204,7 @@ _backward(PyObject * self) {
 }
 
 static PyObject *
-backward(PyObject * self){
+backward(PyObject *self){
   if (!((Value *)self)->topology) {
     ((Value *)self)->topology = malloc(sizeof(List));
     ((Value *)self)->topology->head = NULL;
@@ -215,7 +212,7 @@ backward(PyObject * self){
     build_topology(self, ((Value *)self)->topology);
   } 
   ((Value *)self)->grad = 1.0;
-  Node * node = ((Value *)self)->topology->tail;
+  Node *node = ((Value *)self)->topology->tail;
   while (node) {
     _backward((PyObject *)(node->value));
     node = node->prev;
@@ -237,51 +234,51 @@ static PyMemberDef Value_members[] = {
    {NULL}
   };
 
-PyObject * pyvalue_add(PyObject * self, PyObject * other) {
-  Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+PyObject * pyvalue_add(PyObject *self, PyObject *other) {
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
   value->data = ((Value *)self)->data + ((Value *)other)->data;
   value->grad = 0.0;
   value->prev = PyTuple_Pack(2, self, other);
   value->func_idx = 0;
-  return (PyObject*)value;
+  return (PyObject *)value;
 }
 
-PyObject * pyvalue_mul(PyObject * self, PyObject * other) {
-  Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+PyObject * pyvalue_mul(PyObject *self, PyObject *other) {
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
   value->data = ((Value *)self)->data * ((Value *)other)->data;
   value->grad = 0.0;
   value->prev = PyTuple_Pack(2, self, other);
   value->func_idx = 1;
-  return (PyObject*)value;
+  return (PyObject *)value;
 }
 
-PyObject * pyvalue_pow(PyObject * self, PyObject * other, PyObject * arg) {
-  Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+PyObject * pyvalue_pow(PyObject *self, PyObject *other, PyObject *arg) {
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
   value->data = pow(((Value *)self)->data, PyFloat_AsDouble(other));
   value->grad = 0.0;
   value->prev = PyTuple_Pack(1, self);
   value->tmp = other;
   value->func_idx = 2;
-  return (PyObject*)value;
+  return (PyObject *)value;
 }
 
-PyObject * pyvalue_negative(PyObject * self) {
-  PyObject * other = (PyObject *)Value_Type.tp_alloc(&Value_Type, 0);
+PyObject * pyvalue_negative(PyObject *self) {
+  PyObject *other = (PyObject *)Value_Type.tp_alloc(&Value_Type, 0);
   Py_INCREF(other);
   ((Value *)other)->data = -1.0;
   ((Value *)other)->grad = 0.0;
   ((Value *)other)->prev = PyTuple_New(0);
   ((Value *)other)->func_idx = -1;
-  PyObject* value = Value_Type.tp_alloc(&Value_Type, 0);
+  PyObject *value = Value_Type.tp_alloc(&Value_Type, 0);
   value = pyvalue_mul(self, other);
   return value;
 }
 
-PyObject * pyvalue_subtract(PyObject * self, PyObject * other) {
+PyObject * pyvalue_subtract(PyObject *self, PyObject *other) {
   return pyvalue_add(self, pyvalue_negative(other));
 }
 
-PyObject * pyvalue_truediv(PyObject * self, PyObject * other) {
+PyObject * pyvalue_truediv(PyObject *self, PyObject *other) {
   return pyvalue_mul(self, pyvalue_pow(other, PyFloat_FromDouble(-1.0), NULL));
 }
 
@@ -388,6 +385,6 @@ PyMODINIT_FUNC PyInit_engine(void) {
     return NULL;
   }
   Py_INCREF(&Value_Type);
-  PyModule_AddObject(m, "Value", (PyObject*)&Value_Type);
+  PyModule_AddObject(m, "Value", (PyObject *)&Value_Type);
   return m;
 }
