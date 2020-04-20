@@ -129,7 +129,6 @@ add_backward(PyObject * self) {
   Value * child_1 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
   Value * child_2 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 1));
   
-  printf("%ld\n", PyTuple_Size(((Value *)self)->prev));
   child_1->grad += ((Value*)self)->grad;
   child_2->grad += ((Value*)self)->grad;
   Py_RETURN_NONE;
@@ -147,9 +146,11 @@ mul_backward(PyObject * self) {
 static PyObject *
 pow_backward(PyObject * self) {
   Value * child = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
+
+  // self.grad += (other * self.data**(other-1)) * out.grad
   child->grad += PyFloat_AsDouble(((Value*)self)->tmp) *
-    pow(child->data, PyFloat_AsDouble(((Value*)self)->tmp) - 1) *
-    ((Value*)self)->data;
+    pow(child->data, PyFloat_AsDouble(((Value*)self)->tmp) - 1.0) *
+    ((Value*)self)->grad;
   Py_RETURN_NONE;
 }
 
@@ -243,7 +244,6 @@ static PyMemberDef Value_members[] = {
   };
 
 PyObject * pyvalue_add(PyObject * self, PyObject * other) {
-  printf("Add\n");
   Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
   value->data = ((Value *)self)->data + ((Value *)other)->data;
   value->grad = 0.0;
@@ -253,7 +253,6 @@ PyObject * pyvalue_add(PyObject * self, PyObject * other) {
 }
 
 PyObject * pyvalue_mul(PyObject * self, PyObject * other) {
-  printf("Mul\n");
   Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
   value->data = ((Value *)self)->data * ((Value *)other)->data;
   value->grad = 0.0;
@@ -263,7 +262,6 @@ PyObject * pyvalue_mul(PyObject * self, PyObject * other) {
 }
 
 PyObject * pyvalue_pow(PyObject * self, PyObject * other, PyObject * arg) {
-  printf("Pow\n");
   Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
   value->data = pow(((Value *)self)->data, PyFloat_AsDouble(other));
   value->grad = 0.0;
@@ -274,7 +272,6 @@ PyObject * pyvalue_pow(PyObject * self, PyObject * other, PyObject * arg) {
 }
 
 PyObject * pyvalue_negate(PyObject * self) {
-  printf("Negate\n");
   PyObject * other = (PyObject *)Value_Type.tp_alloc(&Value_Type, 0);
   Py_INCREF(other);
   ((Value *)other)->data = -1.0;
@@ -283,18 +280,14 @@ PyObject * pyvalue_negate(PyObject * self) {
   ((Value *)other)->func_idx = -1;
   PyObject* value = Value_Type.tp_alloc(&Value_Type, 0);
   value = pyvalue_mul(self, other);
-  printf("%ld\n", PyTuple_Size(((Value *)value)->prev));
-  printf("%d\n", ((Value *)value)->func_idx);
   return value;
 }
 
 PyObject * pyvalue_subtract(PyObject * self, PyObject * other) {
-  printf("Subtract\n");
   return pyvalue_add(self, pyvalue_negate(other));
 }
 
 PyObject * pyvalue_truediv(PyObject * self, PyObject * other) {
-  printf("Div\n");
   return pyvalue_mul(self, pyvalue_pow(other, PyFloat_FromDouble(-1.0), NULL));
 }
 
