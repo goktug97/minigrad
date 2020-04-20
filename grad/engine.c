@@ -1,39 +1,54 @@
 #include <Python.h>
 #include "structmember.h"
+#include <math.h>
+#include <string.h>
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+
+#define __COMP_NPY_UNUSED __attribute__ ((__unused__))
+#define NPY_UNUSED(x) (__NPY_UNUSED_TAGGED ## x) __COMP_NPY_UNUSED
+
+typedef struct List List;
 
 typedef struct {
   PyObject_HEAD
   double data;
   double grad;
-  PyObject* _prev;
-  PyObject* _backward;
+  PyObject* prev;
+  int func_idx;
+  PyObject* tmp;
+  List * topology;
+  int visited;
 } Value;
+
+typedef struct _Node {
+  struct _Node * prev;
+  Value * value;
+  struct _Node * next;
+} Node;
+
+struct List {
+  Node * head;
+  Node * tail;
+};
 
 static PyTypeObject Value_Type;
 
 PyObject *
-Value_new(PyTypeObject *type,
+Value_new(PyTypeObject *NPY_UNUSED(type),
           PyObject *args,
-          PyObject *kwds) {
+          PyObject *NPY_UNUSED(kwds)) {
   double data;
-  PyObject* _prev = NULL;
-  if (!PyArg_ParseTuple(args, "d|O!", &data, &PyTuple_Type, &_prev)){
-    printf("asdasd\n");
+  if (!PyArg_ParseTuple(args, "d", &data))
     return NULL;
-  }
   Value* value = (Value*)Value_Type.tp_alloc(&Value_Type, 0);
   if (value) {
     value->grad = 0.0;
-    value->_backward = Py_None;
+    value->visited = 0;
     value->data = data;
-    if (_prev) {
-      Py_INCREF(_prev);
-      value->_prev = _prev;
-    } else {
-      value->_prev = PyTuple_New(0);
-    }
+    value->prev = PyTuple_New(0);
+    value->topology = NULL;
+    value->tmp = Py_None;
   }
   return (PyObject*)value;
 }
@@ -41,8 +56,8 @@ Value_new(PyTypeObject *type,
 static int
 Value_traverse(Value *self, visitproc visit, void *arg) {
   int vret;
-  if (self->_prev) {
-    vret = visit(self->_prev, arg);
+  if (self->prev) {
+    vret = visit(self->prev, arg);
     if (vret != 0)
       return vret;
   }
@@ -52,8 +67,12 @@ Value_traverse(Value *self, visitproc visit, void *arg) {
 static int
 Value_clear(Value *self) {
   PyObject *tmp;
-  tmp = self->_prev;
-  self->_prev = NULL;
+  tmp = self->prev;
+  self->prev = NULL;
+  Py_XDECREF(tmp);
+
+  tmp = self->tmp;
+  self->tmp = NULL;
   Py_XDECREF(tmp);
   return 0;
 }
@@ -87,52 +106,176 @@ Value_repr(PyObject *self)
 }
 
 static PyObject *
-Value_setgrad(Value* self, PyObject *args) {
-  double grad;
-  PyArg_ParseTuple(args, "d", &grad);
-  self->grad = grad;
+relu_backward(PyObject * self) {
+  Value * child = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
+  child->grad += (((Value *)self)->data > 0) * ((Value *)self)->grad;
+  Py_RETURN_NONE;
+}
+
+static PyObject *
+add_backward(PyObject * self) {
+  Value * child_1 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
+  Value * child_2 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 1));
+  child_1->grad += ((Value*)self)->grad;
+  child_2->grad += ((Value*)self)->grad;
+  Py_RETURN_NONE;
+}
+
+static PyObject *
+mul_backward(PyObject * self) {
+  Value * child_1 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
+  Value * child_2 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 1));
+  child_1->grad += child_2->data * ((Value*)self)->grad;
+  child_2->grad += child_1->data * ((Value*)self)->grad;
+  Py_RETURN_NONE;
+}
+
+static PyObject *
+pow_backward(PyObject * self) {
+  Value * child = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
+  child->grad += PyFloat_AsDouble(((Value*)self)->tmp) *
+    pow(child->data, PyFloat_AsDouble(((Value*)self)->tmp) - 1) *
+    ((Value*)self)->data;
+  Py_RETURN_NONE;
+}
+
+typedef PyObject * (*BackwardFunction)(PyObject *);
+static BackwardFunction backward_methods[] = {
+   &add_backward,
+   &mul_backward,
+   &pow_backward,
+   &relu_backward
+  };
+
+static PyObject * Value_relu(PyObject* self) {
+  Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+  if (((Value *)self)->data < 0.0) {
+    value->data = 0.0;
+  } else {
+    value->data = ((Value *)self)->data;
+  }
+  value->grad = 0.0;
+  value->prev = PyTuple_Pack(1, self);
+  value->func_idx = 3;
+  return (PyObject*)value;
+}
+
+static void list_append(List * list, PyObject * value) {
+  Node * node = malloc(sizeof(Node));
+  node->value = ((Value *)value);
+  node->next = NULL;
+  if (!(list->head)) {
+    node->prev = NULL;
+    list->head = node;
+    list->tail = node;
+  } else {
+    node->prev = list->tail;
+    list->tail->next = node;
+    list->tail = node;
+  }
+}
+
+static void build_topology(PyObject * value, List * topology) {
+  Value * _value = ((Value *)value);
+  if (!(_value->visited)) {
+    _value->visited = 1;
+    int n_child = PyTuple_Size(_value->prev);
+    for (int i = 0; i < n_child; ++i) {
+      PyObject * child = PyTuple_GetItem(((Value *)value)->prev, i);
+      build_topology(child, topology);
+    }
+    list_append(topology, value);
+  }
+}
+
+static PyObject *
+_backward(PyObject * self) {
+  return backward_methods[((Value *)self)->func_idx](self);
+}
+
+static PyObject *
+backward(PyObject * self){
+  if (!((Value *)self)->topology) {
+    ((Value *)self)->topology = malloc(sizeof(List));
+    ((Value *)self)->topology->head = NULL;
+    ((Value *)self)->topology->tail = NULL;
+    build_topology(self, ((Value *)self)->topology);
+  } 
+  ((Value *)self)->grad = 1.0;
+  Node * node = ((Value *)self)->topology->tail;
+  while (!node) {
+    _backward((PyObject *)(node->value));
+    node = node->prev;
+  }
   Py_RETURN_NONE;
 }
 
 static PyMethodDef Value_methods[] = {
-    {"set_grad", (PyCFunction)Value_setgrad, METH_VARARGS, "Set Gradient"},
+    {"relu", (PyCFunction)Value_relu, METH_NOARGS, "ReLU"},
+    // {"_backward", (PyCFunction)_backward, METH_NOARGS, "Backward"}, // DEBUG
+    {"backward", (PyCFunction)backward, METH_NOARGS, "Backward"},
     {NULL}  /* Sentinel */
 };
 
 static PyMemberDef Value_members[] = {
    {"data", T_DOUBLE, offsetof(Value, data), 0, "Data"},
    {"grad", T_DOUBLE, offsetof(Value, grad), 0, "Gradient of the Object"},
-   {"_backward", T_OBJECT_EX, offsetof(Value, _backward), 0, "Backward Function"},
-   {"_prev", T_OBJECT_EX, offsetof(Value, _prev), 0, "Children"},
+   // {"prev", T_OBJECT_EX, offsetof(Value, prev), 0, "Children"}, // DEBUG
    {NULL}
   };
 
 PyObject * pyvalue_add(PyObject * self, PyObject * other) {
-  Value* _self = (Value *)self;
-  Value* _other = (Value *)other;
   Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
-  value->data = _self->data + _other->data;
+  value->data = ((Value *)self)->data + ((Value *)other)->data;
   value->grad = 0.0;
-  value->_prev = PyTuple_Pack(2, self, other);
-  static char * code = "(value._prev[0].set_grad(value._prev[0].grad + value.grad),\
-                         value._prev[1].set_grad(value._prev[1].grad + value.grad))";
-  PyCodeObject *c = (PyCodeObject *) Py_CompileString(code, "fn", Py_eval_input);
-  c->co_name = PyUnicode_FromString("add_backward");
-  c->co_flags |= CO_VARARGS; 
-  c->co_nlocals = 1; 
-  PyObject * l = PyFunction_New((PyObject *) c, PyEval_GetGlobals());
-  value->_backward = l;
+  value->prev = PyTuple_Pack(2, self, other);
+  value->func_idx = 0;
   return (PyObject*)value;
+}
+
+PyObject * pyvalue_mul(PyObject * self, PyObject * other) {
+  Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+  value->data = ((Value *)self)->data * ((Value *)other)->data;
+  value->grad = 0.0;
+  value->prev = PyTuple_Pack(2, self, other);
+  value->func_idx = 1;
+  return (PyObject*)value;
+}
+
+PyObject * pyvalue_pow(PyObject * self, PyObject * other, PyObject * arg) {
+  Value* value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+  value->data = pow(((Value *)self)->data, PyFloat_AsDouble(other));
+  value->grad = 0.0;
+  value->prev = PyTuple_Pack(1, self);
+  value->tmp = other;
+  value->func_idx = 2;
+  return (PyObject*)value;
+}
+
+PyObject * pyvalue_negate(PyObject * self) {
+  PyObject * other = (PyObject *)Value_Type.tp_alloc(&Value_Type, 0);
+  ((Value *)other)->data = -1;
+  ((Value *)other)->grad = 0.0;
+  ((Value *)other)->prev = PyTuple_New(0);
+  return pyvalue_mul(self, other);
+}
+
+PyObject * pyvalue_subtract(PyObject * self, PyObject * other) {
+  return pyvalue_add(self, pyvalue_negate(other));
+}
+
+PyObject * pyvalue_truediv(PyObject * self, PyObject * other) {
+  return pyvalue_mul(self, pyvalue_pow(other, PyFloat_FromDouble(-1.0), NULL));
 }
 
 PyNumberMethods Value_as_number = {
     pyvalue_add,          /* nb_add */
-    0, /* nb_subtract */
-    0, /* nb_multiply */
+    pyvalue_subtract, /* nb_subtract */
+    pyvalue_mul, /* nb_multiply */
     0, /* nb_divide */
     0, /* nb_remainder */
-    0, /* nb_divmod */
-    0, /* nb_power */
+    pyvalue_pow, /* nb_divmod */
+    pyvalue_negate, /* nb_power */
     0, /* nb_negative */
     0, /* nb_positive */
     0, /* nb_absolute */
@@ -156,9 +299,8 @@ PyNumberMethods Value_as_number = {
     0, /* nb_inplace_xor */
     0, /* nb_inplace_or */
     0, /* nb_floor_divide */
-    0, /* nb_true_divide */
-    0, /* nb_inplace_floor_divide */
-    0, /* nb_inplace_true_divide */
+    pyvalue_truediv, /* nb_true_divide */
+    0,
     0, /* nb_index */
     0, /* nb_matrix_multiply */
     0, /* nb_inplace_matrix_multiply */
