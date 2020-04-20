@@ -1,19 +1,28 @@
-import engine
+from engine import Value
 import numpy as np
 
-p1 = engine.Value(20.0)
-p2 = engine.Value(20.0)
-a = p1.relu()
-print(hash(p1))
-# a = p1/p2
-print('a')
-print(a.data)
-a.grad = -30
-print(p1.grad)
-a.backward()
-print(p1.grad)
-# print(p1.grad)
-# print(a._prev)
+x = Value(-4.0)
+z = Value(2.0) * x + Value(2.0) + x
+q = z.relu() + z * x
+h = (z * z).relu()
+y = h + q + q * x
+y.backward()
+xmg, ymg = x, y
+
+print(xmg, ymg)
+
+print(xmg.grad)
+
+import torch
+x = torch.Tensor([-4.0]).double()
+x.requires_grad = True
+z = 2 * x + 2 + x
+q = z.relu() + z * x
+h = (z * z).relu()
+y = h + q + q * x
+y.backward()
+xpt, ypt = x, y
+print(xpt.grad.item())
 
 
 

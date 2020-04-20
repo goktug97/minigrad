@@ -49,6 +49,7 @@ Value_new(PyTypeObject *NPY_UNUSED(type),
     value->prev = PyTuple_New(0);
     value->topology = NULL;
     value->tmp = Py_None;
+    value->func_idx = -1;
   }
   return (PyObject*)value;
 }
@@ -74,6 +75,7 @@ Value_clear(Value *self) {
   tmp = self->tmp;
   self->tmp = NULL;
   Py_XDECREF(tmp);
+
   return 0;
 }
 
@@ -82,6 +84,16 @@ Value_dealloc(Value* self)
 {
   // PyObject_GC_UnTrack(self);
   Value_clear(self);
+  if (((Value *)self)->topology) {
+    Node * node = ((Value *)self)->topology->tail;
+    Node * tmp;
+    while (node) {
+      tmp = node;
+      node = node->prev;
+      free(tmp);
+    }
+    free(((Value *)self)->topology);
+  }
   Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -116,6 +128,8 @@ static PyObject *
 add_backward(PyObject * self) {
   Value * child_1 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
   Value * child_2 = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 1));
+  
+  printf("Add Backward %ld\n", PyTuple_Size(((Value *)self)->prev));
   child_1->grad += ((Value*)self)->grad;
   child_2->grad += ((Value*)self)->grad;
   Py_RETURN_NONE;
@@ -190,7 +204,11 @@ static void build_topology(PyObject * value, List * topology) {
 
 static PyObject *
 _backward(PyObject * self) {
-  return backward_methods[((Value *)self)->func_idx](self);
+  if (((Value *)self)->func_idx >= 0) {
+    return backward_methods[((Value *)self)->func_idx](self);
+  } else {
+    Py_RETURN_NONE;
+  }
 }
 
 static PyObject *
@@ -203,7 +221,9 @@ backward(PyObject * self){
   } 
   ((Value *)self)->grad = 1.0;
   Node * node = ((Value *)self)->topology->tail;
-  while (!node) {
+  while (node) {
+    printf("Func Idx: %d\n", node->value->func_idx);
+    printf("asdf\n");
     _backward((PyObject *)(node->value));
     node = node->prev;
   }
