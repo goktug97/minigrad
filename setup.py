@@ -9,8 +9,8 @@ with open(os.path.join(directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(name='minigrad',
-      version='0.0.5',
-      description='Autograd Engine for Numpy',
+      version='0.0.6',
+      description='Autograd Engine written in Python C-API',
       author='Göktuğ Karakaşlı',
       author_email='karakasligk@gmail.com',
       license='MIT',

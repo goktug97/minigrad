@@ -265,7 +265,7 @@ PyObject * pyvalue_pow(PyObject * self, PyObject * other, PyObject * arg) {
   return (PyObject*)value;
 }
 
-PyObject * pyvalue_negate(PyObject * self) {
+PyObject * pyvalue_negative(PyObject * self) {
   PyObject * other = (PyObject *)Value_Type.tp_alloc(&Value_Type, 0);
   Py_INCREF(other);
   ((Value *)other)->data = -1.0;
@@ -278,7 +278,7 @@ PyObject * pyvalue_negate(PyObject * self) {
 }
 
 PyObject * pyvalue_subtract(PyObject * self, PyObject * other) {
-  return pyvalue_add(self, pyvalue_negate(other));
+  return pyvalue_add(self, pyvalue_negative(other));
 }
 
 PyObject * pyvalue_truediv(PyObject * self, PyObject * other) {
@@ -292,7 +292,7 @@ PyNumberMethods Value_as_number = {
     0,
     0,
     pyvalue_pow,
-    pyvalue_negate,
+    pyvalue_negative,
     0,
     0,
     0,
