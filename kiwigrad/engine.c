@@ -9,7 +9,9 @@ typedef struct {
   PyObject_HEAD
   double data;
   double grad;
+  double oa;
   PyObject *prev;
+  PyObject *op;
   int func_idx;
   PyObject *tmp;
   List *topology;
@@ -41,7 +43,9 @@ Value_new(PyTypeObject *type,
     value->grad = 0.0;
     value->visited = 0;
     value->data = data;
+    value->oa = 0.0;
     value->prev = PyTuple_New(0);
+    value->op = Py_None;
     value->topology = NULL;
     value->tmp = Py_None;
     value->func_idx = -1;
@@ -117,6 +121,39 @@ relu_backward(PyObject *self) {
 }
 
 static PyObject *
+sigmoid_backward(PyObject *self) {
+  Value *child = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 0));
+  double x = ((Value *)self)->data;
+  child->grad += (x * (1 - x)) * ((Value *)self)->grad;
+  Py_RETURN_NONE;
+}
+
+static PyObject *
+log_backward(PyObject *self) {
+  Value *child = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 0));
+  double x = ((Value *)self)->data;
+  double t = exp(x);
+  child->grad += (pow(t, -1)) * ((Value *)self)->grad;
+  Py_RETURN_NONE;
+}
+
+static PyObject *
+tanh_backward(PyObject *self) {
+  Value *child = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 0));
+  double x = ((Value *)self)->data;
+  child->grad += (1 - pow(x, 2)) * ((Value *)self)->grad;
+  Py_RETURN_NONE;
+}
+
+static PyObject *
+exp_backward(PyObject *self) {
+  Value *child = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 0));
+  double x = ((Value *)self)->data;
+  child->grad += x * ((Value *)self)->grad;
+  Py_RETURN_NONE;
+}
+
+static PyObject *
 add_backward(PyObject *self) {
   Value *child_1 = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 0));
   Value *child_2 = ((Value *)PyTuple_GetItem(((Value *)self)->prev, 1));
@@ -138,19 +175,23 @@ mul_backward(PyObject *self) {
 static PyObject *
 pow_backward(PyObject *self) {
   Value *child = ((Value*)PyTuple_GetItem(((Value *)self)->prev, 0));
-
-  child->grad += PyFloat_AsDouble(((Value *)self)->tmp) *
-    pow(child->data, PyFloat_AsDouble(((Value *)self)->tmp) - 1.0) *
-    ((Value *)self)->grad;
+  double exponent = ((Value *)self)->oa; 
+  double base = child->data;
+  child->grad += exponent * pow(base, exponent - 1.0) * ((Value *)self)->grad;
   Py_RETURN_NONE;
 }
+
 
 typedef PyObject * (*BackwardFunction)(PyObject *);
 static BackwardFunction backward_methods[] = {
    &add_backward,
    &mul_backward,
    &pow_backward,
-   &relu_backward
+   &relu_backward,
+   &sigmoid_backward,
+   &log_backward,
+   &tanh_backward,
+   &exp_backward
   };
 
 static PyObject * Value_relu(PyObject *self) {
@@ -162,7 +203,56 @@ static PyObject * Value_relu(PyObject *self) {
   }
   value->grad = 0.0;
   value->prev = PyTuple_Pack(1, self);
+  value->op = PyUnicode_FromString("relu");
   value->func_idx = 3;
+  return (PyObject *)value;
+}
+
+static PyObject * Value_sigmoid(PyObject *self) {
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+  double x = ((Value *)self)->data;
+  double t = 1 / (1 + exp(-x));
+  value->data = t;
+  value->grad = 0.0;
+  value->prev = PyTuple_Pack(1, self);
+  value->op = PyUnicode_FromString("sigmoid");
+  value->func_idx = 4;
+  return (PyObject *)value;
+}
+
+static PyObject * Value_log(PyObject *self) {
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+  double x = ((Value *)self)->data;
+  double t = log(x);
+  value->data = t;
+  value->grad = 0.0;
+  value->prev = PyTuple_Pack(1, self);
+  value->op = PyUnicode_FromString("log");
+  value->func_idx = 5;
+  return (PyObject *)value;
+}
+
+static PyObject * Value_tanh(PyObject *self) {
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+  double x = ((Value *)self)->data;
+  double t = (exp(2*x) - 1)/(exp(2*x) + 1);
+  value->data = t;
+  value->grad = 0.0;
+  value->prev = PyTuple_Pack(1, self);
+  value->op = PyUnicode_FromString("tanh");
+  value->func_idx = 6;
+  return (PyObject *)value;
+}
+
+static PyObject * Value_exp(PyObject *self) {
+  Value *value = (Value *)Value_Type.tp_alloc(&Value_Type, 0);
+  double x = ((Value *)self)->data;
+  double t = exp(x);
+  value->data = t;
+  value->grad = 0.0;
+  value->prev = PyTuple_Pack(1, self);
+  value->op = PyUnicode_FromString("exp");
+  value->func_idx = 7;
   return (PyObject *)value;
 }
 
@@ -222,6 +312,10 @@ backward(PyObject *self){
 
 static PyMethodDef Value_methods[] = {
     {"relu", (PyCFunction)Value_relu, METH_NOARGS, "ReLU"},
+    {"sigmoid", (PyCFunction)Value_sigmoid, METH_NOARGS, "Sigmoid"},
+    {"log", (PyCFunction)Value_log, METH_NOARGS, "Log"},
+    {"tanh", (PyCFunction)Value_tanh, METH_NOARGS, "Tanh"},
+    {"exp", (PyCFunction)Value_exp, METH_NOARGS, "Exp"},
     // {"_backward", (PyCFunction)_backward, METH_NOARGS, "Backward"}, // DEBUG
     {"backward", (PyCFunction)backward, METH_NOARGS, "Backward"},
     {NULL}  /* Sentinel */
@@ -230,7 +324,8 @@ static PyMethodDef Value_methods[] = {
 static PyMemberDef Value_members[] = {
    {"data", T_DOUBLE, offsetof(Value, data), 0, "Data"},
    {"grad", T_DOUBLE, offsetof(Value, grad), 0, "Gradient of the Object"},
-   // {"prev", T_OBJECT_EX, offsetof(Value, prev), 0, "Children"}, // DEBUG
+   {"_prev", T_OBJECT, offsetof(Value, prev), 0, "Children"}, // DEBUG
+   {"_op", T_OBJECT, offsetof(Value, op), 0, "Label"},
    {NULL}
   };
 
@@ -239,6 +334,7 @@ PyObject * pyvalue_add(PyObject *self, PyObject *other) {
   value->data = ((Value *)self)->data + ((Value *)other)->data;
   value->grad = 0.0;
   value->prev = PyTuple_Pack(2, self, other);
+  value->op = PyUnicode_FromString("+");
   value->func_idx = 0;
   return (PyObject *)value;
 }
@@ -248,6 +344,7 @@ PyObject * pyvalue_mul(PyObject *self, PyObject *other) {
   value->data = ((Value *)self)->data * ((Value *)other)->data;
   value->grad = 0.0;
   value->prev = PyTuple_Pack(2, self, other);
+  value->op = PyUnicode_FromString("*");
   value->func_idx = 1;
   return (PyObject *)value;
 }
@@ -257,7 +354,9 @@ PyObject * pyvalue_pow(PyObject *self, PyObject *other, PyObject *arg) {
   value->data = pow(((Value *)self)->data, PyFloat_AsDouble(other));
   value->grad = 0.0;
   value->prev = PyTuple_Pack(1, self);
-  value->tmp = other;
+  value->oa = PyFloat_AsDouble(other);
+  value->op = PyUnicode_FromString("pow");
+  //value->tmp = other;
   value->func_idx = 2;
   return (PyObject *)value;
 }
